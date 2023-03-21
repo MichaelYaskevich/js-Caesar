@@ -187,8 +187,7 @@ class Caesar extends Cipher {
         }
         for (let k = 0; k < lettersCount; k++) {
             for (let i = 0; i < lettersCount; i++) {
-                sum += (idealArrayOfFrequency[i] - arrayOfFrequency[(i + k) % lettersCount]) *
-                    (idealArrayOfFrequency[i] - arrayOfFrequency[(i + k) % lettersCount]);
+                sum += (idealArrayOfFrequency[i] - arrayOfFrequency[(i + k) % lettersCount])**2;
             }
             if (sum < minSum || minSum == -1) {
                 minSum = sum;
@@ -225,11 +224,19 @@ class Vigenere extends Cipher {
     set keyWord(value) {
         if (value == "")
             console.log("You keyWord is empty");
-        else
+        else{
             this._keyWord = value;
+            if (value != undefined && value.length > 100){
+                console.log("You can can code with any key you want, but keep in mind that " 
+                + "our decoder doesn't look at keys with length > 100 to speed up time of decoding");
+            }
+        }
     }
 
     code(mes) {
+        if (mes.length < 300){
+            console.log("Небольшие сообщения могут непраильно декодироваться при использовании шифра виженера.")
+        }
         let len = mes.length;
         let res = "";
         let lettersCount;
@@ -245,9 +252,10 @@ class Vigenere extends Cipher {
         for (let i = 0; i < len; i++) {
             if (mes.charCodeAt(i) >= firstLetterCode
                 && mes.charCodeAt(i) <= firstLetterCode + lettersCount - 1) {
-                res += String.fromCharCode((mes.charCodeAt(i) - firstLetterCode
-                    + (this.keyWord.charCodeAt(i % this.keyWord.length) - firstLetterCode) % lettersCount + lettersCount)
-                    % lettersCount + firstLetterCode);
+                let shift = this.keyWord.charCodeAt(i % this.keyWord.length) - firstLetterCode
+                shift = shift % lettersCount + lettersCount // на случай если shift < 0
+                res += String.fromCharCode(
+                    (mes.charCodeAt(i) - firstLetterCode + shift) % lettersCount + firstLetterCode);
             }
             else
                 res += mes.charAt(i);
@@ -256,6 +264,9 @@ class Vigenere extends Cipher {
     }
 
     decode(mes) {
+        if (mes.length < 300){
+            console.log("Небольшие сообщения могут непраильно декодироваться при использовании шифра виженера.")
+        }
         let idealArrayOfFrequency;
         let firstLetterCode;
         if (this.alphabit == "en") {
@@ -267,22 +278,28 @@ class Vigenere extends Cipher {
             firstLetterCode = 1072;
         }  
         let idealIndex = 0;
-        let idLen = idealArrayOfFrequency.length;
-        for (let i = 0; i < idLen; i++) {
-            idealIndex += idealArrayOfFrequency[i] * idealArrayOfFrequency[i];
+        for (let i = 0; i < idealArrayOfFrequency.length; i++) {
+            idealIndex += idealArrayOfFrequency[i]**2;
         }
         let len = mes.length;
         let keyLength = 0;
-        for (let keyLen = 0; keyLen < len; keyLen++) {
-            let processedMes;
-            if (keyLen == 0)
-                processedMes = mes;
-            else
-                processedMes = this.makeMesDependOnKeyWordLength(mes, keyLen);
-            let matchIndex = this.makeMatchIndex(processedMes);
-            if (Math.abs(idealIndex - matchIndex) < 0.01 && this.alphabit == "en"
-                || this.alphabit == "ru" && (idealIndex - matchIndex < 0 && idealIndex - matchIndex > -0.015
-                || idealIndex - matchIndex > 0 && idealIndex - matchIndex < 0.003)) {
+        let minDiff;
+        for (let keyLen = 1; keyLen < Math.min(len, 100); keyLen++) {
+            let matchIndex;
+            matchIndex = 0
+            for (let i = 0; i < keyLen; i++){
+                let mesSubsequence = this.makeMesSubsequence(mes, i, keyLen);
+                matchIndex += this.makeMatchIndex(mesSubsequence);
+            }
+            matchIndex /= keyLen
+            
+            let diff = idealIndex - matchIndex;
+            if (minDiff == undefined || Math.abs(diff) < minDiff){
+                minDiff = Math.abs(diff);
+                keyLength = keyLen;
+            }
+            if (this.alphabit == "en" && Math.abs(diff) < 0.005
+                || this.alphabit == "ru" && (diff < 0 && diff > -0.015 || diff > 0 && diff < 0.003)) {
                 keyLength = keyLen;
                 break;
             }
@@ -290,7 +307,7 @@ class Vigenere extends Cipher {
         let keyWordToPrint = "";
         let resArray = new Array(len);
         for (let pos = 0; pos < keyLength; pos++) {
-            let processedMes = this.makeMesDependOnKeyWordLength(mes.substring(pos), keyLength);
+            let processedMes = this.makeMesSubsequence(mes, pos, keyLength);
             let caesar = new Caesar(processedMes, this.alphabit);
             let decLen = caesar.decodedMessage.length;
             let keyLetter = String.fromCharCode(caesar.shift + firstLetterCode);
@@ -305,7 +322,10 @@ class Vigenere extends Cipher {
         for (let i = 0; i < len; i++) {
             res += resArray[i];
         }
-        console.log(`The keyword was: ${keyWordToPrint}`);
+        if (keyLength == 0){
+            res = mes
+        }
+        console.log(`The keyword was: ${keyWordToPrint == "" ? String.fromCharCode(firstLetterCode) : keyWordToPrint }`);
         return res;
     }
 
@@ -314,15 +334,15 @@ class Vigenere extends Cipher {
         let len = arrayOfFrequency.length;
         let sum = 0;
         for (let i = 0; i < len; i++) {
-            sum += arrayOfFrequency[i] * arrayOfFrequency[i];
+            sum += arrayOfFrequency[i]**2;
         }
         return sum;
     }
 
-    makeMesDependOnKeyWordLength(mes, keyLen) {
+    makeMesSubsequence(mes, start, keyLen) {
         let len = mes.length;
         let resMes = "";
-        for (let i = 0; i < len; i += keyLen) {
+        for (let i = start; i < len; i += keyLen) {
             resMes += mes.charAt(i);
         }
         return resMes;
